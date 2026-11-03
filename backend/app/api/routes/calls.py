@@ -52,15 +52,21 @@ async def initiate_call(request: InitiateCallRequest):
     # Generate a LiveKit token for this room
     token = await generate_agent_token(room_name=record.room_name, participant_name="citizen")
 
-    # If a phone number is provided, trigger outbound cellular call via Exotel / Twilio / SIP
+    # If a phone number is provided, trigger outbound cellular call via LiveKit SIP / Exotel / Twilio
     phone_dialed = False
     dialer_used = None
     if request.phone_number:
+        # 1. Primary: LiveKit SIP Outbound Trunk (direct connection into AI Voice Room)
+        if settings.LIVEKIT_SIP_TRUNK_ID:
+            phone_dialed = await dial_outbound_sip_phone(request.phone_number, record.room_name)
+            if phone_dialed:
+                dialer_used = f"LiveKit SIP Trunk ({settings.LIVEKIT_SIP_TRUNK_ID})"
+                print(f"[SIP] Dialing {request.phone_number} directly into room {record.room_name}")
+
+        # 2. Exotel Cloud Telephony fallback
         clean_num = "".join(c for c in request.phone_number if c.isdigit())
         is_indian = request.phone_number.startswith("+91") or (len(clean_num) == 10) or (clean_num.startswith("91") and len(clean_num) == 12)
-        
-        # 1. Primary for India: Exotel Cloud Telephony
-        if is_indian and is_exotel_configured():
+        if not phone_dialed and is_indian and is_exotel_configured():
             exotel_res = make_exotel_call(request.phone_number)
             if exotel_res.get("success"):
                 phone_dialed = True
@@ -68,18 +74,12 @@ async def initiate_call(request: InitiateCallRequest):
             else:
                 print(f"Exotel call failed: {exotel_res.get('error')}")
 
-        # 2. Twilio Voice fallback
+        # 3. Twilio Voice fallback
         if not phone_dialed:
             call_sid = await place_outbound_call(request.phone_number, GREETING_HINDI)
             if call_sid:
                 phone_dialed = True
                 dialer_used = "Twilio Voice"
-
-        # 3. LiveKit SIP fallback
-        if not phone_dialed:
-            phone_dialed = await dial_outbound_sip_phone(request.phone_number, record.room_name)
-            if phone_dialed:
-                dialer_used = "LiveKit SIP"
 
     message = "Call initiated."
     if phone_dialed:
