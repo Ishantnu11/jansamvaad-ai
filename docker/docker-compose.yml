@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: jansamvaad-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: jansamvaad
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: jansamvaad-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../backend/.env
+    environment:
+      MONGODB_URL: mongodb://mongodb:27017
+    depends_on:
+      - mongodb
+
+  agent:
+    build:
+      context: ../agent
+      dockerfile: Dockerfile
+    container_name: jansamvaad-agent
+    restart: unless-stopped
+    env_file:
+      - ../agent/.env
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: jansamvaad-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
