@@ -97,10 +97,10 @@ class SarvamSTT:
 class SarvamTTS:
     """
     Custom Sarvam AI TTS wrapper.
-    Returns PCM audio bytes at 8kHz mono for telephony.
+    Returns PCM audio bytes for speech output.
     """
 
-    def __init__(self, api_key: str, speaker: str = "meera"):
+    def __init__(self, api_key: str, speaker: str = "simran"):
         self.api_key = api_key
         self.speaker = speaker
         self._http = httpx.AsyncClient(timeout=30.0)
@@ -116,7 +116,7 @@ class SarvamTTS:
             "loudness": 1.5,
             "speech_sample_rate": 8000,
             "enable_preprocessing": True,
-            "model": "bulbul:v1",
+            "model": "bulbul:v3",
         }
         headers = {
             "api-subscription-key": self.api_key,
@@ -238,7 +238,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Initialize Sarvam AI services
     sarvam_stt = SarvamSTT(api_key=SARVAM_API_KEY, language_code="hi-IN")
-    sarvam_tts = SarvamTTS(api_key=SARVAM_API_KEY, speaker="meera")
+    sarvam_tts = SarvamTTS(api_key=SARVAM_API_KEY, speaker="simran")
 
     # Create the agent
     agent = JanSamvaadAgent(
@@ -247,11 +247,20 @@ async def entrypoint(ctx: agents.JobContext):
         sarvam_tts=sarvam_tts,
     )
 
-    # Use OpenAI-compatible LLM (works with Gemini via OpenAI-compat endpoint too)
-    llm = lk_openai.LLM(
-        model="gpt-4o-mini",
-        api_key=os.getenv("OPENAI_API_KEY"),
-    )
+    # Use Google Gemini via OpenAI-compatible endpoint
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if gemini_key:
+        llm = lk_openai.LLM(
+            model="gemini-2.5-flash",
+            api_key=gemini_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+    else:
+        llm = lk_openai.LLM(
+            model="gpt-4o-mini",
+            api_key=openai_key,
+        )
 
     # Use Silero VAD for Voice Activity Detection (interruption handling)
     vad = silero.VAD.load()
